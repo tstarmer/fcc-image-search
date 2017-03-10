@@ -1,19 +1,25 @@
+/*Requires*/
 const mongodb = require('mongodb').MongoClient;
 const express = require('express');
+const https = require('https');
 
 const config = require('config');
 
-console.log(config.bingApiKey);
-console.log(config.mLabUrl);
+// console.log(config.bingApiKey);
+// console.log(config.mLabUrl);
 
+/*Constants*/
 const app = express();
 
 const mongoUrl = config.mLabUrl;
 
-const bingApiUrl = "https://api.cognitive.microsoft.com/bing/v5.0/images/search"
+const bingApiPath = "/bing/v5.0/images/search?"
+const bingHost = "api.cognitive.microsoft.com"
 
+/*Variables*/
+var count = 5;
 
-//init db
+//init db pushes into db for testing
 function initDb(item){
     mongodb.connect(mongoUrl, function(err,db){
         if(err){
@@ -29,27 +35,68 @@ function initDb(item){
     })
 }
 
+function bingImageApiCall(requestPath){
+    console.log("bing request")
+    console.log(requestPath)
+    
+    var options = {
+        // url: bingHost + requestPath,
+        host: bingHost,
+        path: requestPath,
+        headers:{
+            "Ocp-Apim-Subscription-Key": config.bingApiKey
+        }     
+    }
+   
+        
+    https.get(options, function(res){
+        
+        console.log("request made")
+        var rawData = "";
+        
+        res.on("data", function(data){
+            console.log("data received", data)
+            rawData += data;
+            // process.stdout.write(data);
+            console.log(rawData)
+            
+        });
+        res.on("end", function(){
+           if (res.statusCode === 200){
+                console.log("success", rawData)    
+           } 
+        });
+        
+        
+        
+    }).on("error", function(error){
+        console.error(error);
+    });
+    
+    
+}
+
+
 
 app.get("/api/imagesearch/*", function(req,res){
     //get the parameters
     
-    console.log(req.params[0]);
+    // console.log(req.params[0]);
     var searchTerm = req.params[0];
-    console.log(searchTerm)
+    // console.log(searchTerm)
     
-    var offset = req.query.offset
-    console.log(offset)
+    // var offset = req.query.offset
+    // console.log(offset)
+
+    var searchQuery = bingApiPath +"q="+ searchTerm + "&count=" + count;
+    var finalData = bingImageApiCall(searchQuery);
+    // console.log(finalData)
     
-    console.log(req.query)
-    console.log("imagesearch")
-    var output = "looking for " + JSON.stringify(req.params); 
-    console.log(output)
-    res.send(output)
 });
 
 app.get("/api/latest/imagesearch", function(req,res){
     console.log("checking latest")
-    initDb("mortise")
+    // initDb("mortise")
     res.send("latest")
 });
 
