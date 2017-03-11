@@ -16,6 +16,7 @@ const bingHost = "api.cognitive.microsoft.com"
 /*Variables*/
 var count = 5;
 
+
 //init db pushes into db for testing
 function addToDb(term,timestamp){
     mongodb.connect(mongoUrl, function(err,db){
@@ -24,7 +25,6 @@ function addToDb(term,timestamp){
         }else{
             console.log("add to db");
             var ltSearches = db.collection("latest-search")
-           
             ltSearches.insertOne({"term": term,
             "when":timestamp});
            
@@ -141,8 +141,36 @@ app.get("/api/imagesearch/*", function(req,res){
 
 app.get("/api/latest/imagesearch", function(req,res){
     console.log("checking latest")
-   
-    res.send("latest")
+    // var latestSearches;
+    
+    mongodb.connect(mongoUrl, function(err,db){
+        if(err){
+            console.log(err)
+        }else{
+            var ltSearches = db.collection("latest-search")
+            
+            console.log("get fromdb");
+            
+            ltSearches.find({when:{$exists:true}}, {_id:0, term:1, when:1}).sort({when:-1}).limit(10).toArray(function(err,items){
+                if(err){
+                    console.log(err)
+                }else{
+                    // console.log("data?")
+                    
+                    // console.log("lt", latestSearches)
+                    // console.log("i", items)
+                    res.send(items)
+                    db.close();
+                }
+                
+            })
+         
+        }
+        
+                    
+    });
+    
+    
 });
 
 
