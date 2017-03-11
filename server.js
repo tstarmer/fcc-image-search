@@ -5,9 +5,6 @@ const https = require('https');
 
 const config = require('config');
 
-// console.log(config.bingApiKey);
-// console.log(config.mLabUrl);
-
 /*Constants*/
 const app = express();
 
@@ -20,14 +17,16 @@ const bingHost = "api.cognitive.microsoft.com"
 var count = 5;
 
 //init db pushes into db for testing
-function initDb(item){
+function addToDb(term,timestamp){
     mongodb.connect(mongoUrl, function(err,db){
         if(err){
             console.log(err)
         }else{
+            console.log("add to db");
             var ltSearches = db.collection("latest-search")
            
-            ltSearches.insertOne({"something4":"another-something4"});
+            ltSearches.insertOne({"term": term,
+            "when":timestamp});
            
             db.close();
             
@@ -35,9 +34,9 @@ function initDb(item){
     })
 }
 
-function bingImageApiCall(requestPath){
+function bingImageApiCall(requestPath, callback){
     console.log("bing request")
-    console.log(requestPath)
+    // console.log(requestPath)
     
     var options = {
         // url: bingHost + requestPath,
@@ -48,58 +47,103 @@ function bingImageApiCall(requestPath){
         }     
     }
    
-        
+    var rawData = "";
+    
     https.get(options, function(res){
         
         console.log("request made")
-        var rawData = "";
         
         res.on("data", function(data){
-            console.log("data received", data)
+            // console.log("data received", data)
             rawData += data;
-            // process.stdout.write(data);
-            console.log(rawData)
-            
+
         });
         res.on("end", function(){
            if (res.statusCode === 200){
-                console.log("success", rawData)    
+                // console.log("success", rawData)
+                callback(rawData);
            } 
         });
-        
-        
-        
+    
     }).on("error", function(error){
         console.error(error);
     });
+  
+}
+
+function extractUrl(urlString){
     
-    
+    var urlStart = urlString.indexOf("r=")+2
+    var urlEnd = urlString.lastIndexOf("&p=DevEx")
+    urlString = decodeURIComponent(urlString.substring(urlStart, urlEnd));
+    // console.log(urlString)
+    return urlString
 }
 
 
+function parseData(data){
+    data = JSON.parse(data)
+    
+    // console.log(data.value)
+    const items = data.value
+    var item;
+    
+    var parsedData = [];
+    for(var i=0; i<data.value.length; i++){
+        var imageUrl = extractUrl(items[i].contentUrl)
+        var protocol = "http://";
+        
+        if(imageUrl.includes("https")){
+            protocol = "https://"
+        }
+        
+        item = {
+            url:imageUrl,
+            snippet: items[i].name,
+            thumbnail: items[i].thumbnailUrl,
+            context: protocol + items[i].hostPageDisplayUrl
+        }
+        parsedData.push(item);
+    }
+    // console.log(parsedData)
+    
+    return parsedData;
+}
+
 
 app.get("/api/imagesearch/*", function(req,res){
-    //get the parameters
-    
-    // console.log(req.params[0]);
+
     var searchTerm = req.params[0];
     // console.log(searchTerm)
     
-    // var offset = req.query.offset
+    var time = new Date().toUTCString();
+        console.log(time);
+    
+    addToDb(searchTerm, time)
+    
+    
+    var offset = req.query.offset
     // console.log(offset)
 
     var searchQuery = bingApiPath +"q="+ searchTerm + "&count=" + count;
-    var finalData = bingImageApiCall(searchQuery);
-    // console.log(finalData)
+    
+    if(offset){
+        searchQuery += "&offset=" + offset;
+    }
+ 
+    bingImageApiCall(searchQuery, function(data){
+        var result = parseData(data)
+        // console.log("result", result)
+        res.send(result)
+    });
     
 });
 
 app.get("/api/latest/imagesearch", function(req,res){
     console.log("checking latest")
-    // initDb("mortise")
+   
     res.send("latest")
 });
-
 
 
 app.listen(process.env.PORT || 8080, function(){
